@@ -1,0 +1,21 @@
+{
+  "name": "boilerplate-nodets-example",
+  "version": "0.1.0",
+  "description": "Ejemplo aplicado del boilerplate en Node/TypeScript.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node --import tsx src/index.ts",
+    "test": "tsc --noEmit && find src -name '*.test.ts' -print0 | xargs -0 node --import tsx --test",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
