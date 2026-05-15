@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Resortera — 03 profesional</title>
+<style>
+  :root {
+    --bg: #f6f1e7;
+    --fg: #2b2b2b;
+    --sling: #6b4226;
+    --proj: #c64545;
+    --block: #4a6fa5;
+    --accent: #2e8b57;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.4 system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+  .hud {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .hud .stat { font-variant-numeric: tabular-nums; }
+  .hud button {
+    border: 1.5px solid var(--fg);
+    background: transparent;
+    color: var(--fg);
+    padding: 4px 12px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .hud button:hover { background: var(--fg); color: var(--bg); }
+  canvas {
+    background: var(--bg);
+    border: 1.5px solid var(--fg);
+    display: block;
+    touch-action: none;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(246, 241, 231, 0.92);
+  }
+  .overlay.show { display: flex; }
+  .overlay .panel {
+    background: var(--bg);
+    border: 1.5px solid var(--fg);
+    padding: 24px 32px;
+    text-align: center;
+  }
+  .overlay button {
+    margin-top: 12px;
+    border: 1.5px solid var(--fg);
+    background: transparent;
+    color: var(--fg);
+    padding: 6px 16px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .stage {
+    position: relative;
+    width: 900px;
+    height: 600px;
+  }
+  .hint { margin-top: 10px; font-size: 12px; color: #777; }
+</style>
+</head>
+<body>
+  <h1>Resortera — versión profesional</h1>
+  <div class="hud">
+    <span class="stat">Lanzamientos: <strong id="launches">0</strong></span>
+    <span class="stat">Bloques: <strong id="knocked">0</strong>/<strong id="total">0</strong></span>
+    <button id="reset" type="button">Reiniciar</button>
+  </div>
+  <div class="stage">
+    <canvas id="c" width="900" height="600"></canvas>
+    <div id="overlay" class="overlay">
+      <div class="panel">
+        <div id="overlay-msg" style="font-size: 18px;"></div>
+        <button id="overlay-btn" type="button">Jugar de nuevo</button>
+      </div>
+    </div>
+  </div>
+  <div class="hint">Arrastrá el proyectil hacia atrás y soltá para lanzar. La fuerza es proporcional al estiramiento.</div>
+
+<script>
+'use strict';
+(() => {
+  // ====================================================================
+  // CONFIG — todas las constantes mágicas viven acá
+  // ====================================================================
+  const CONFIG = {
+    canvas:    { w: 900, h: 600 },
+    gravity:   1400,                // px/s^2
+    ground:    { y: 560, thickness: 4 },
+    sling:     { x: 130, y: 480, anchorOffset: 8 },
+    projectile:{ r: 14, restThreshold: 25, restTimeMs: 600 },
+    pull:      { max: 160, power: 7.5 },     // estiramiento máximo y multiplicador a velocidad
+    bounds:    { offCanvasMargin: 40 },
+    blockDrop: { settledEps: 0.5 },          // velocidad bajo la cual el bloque se considera apoyado
+    energyLoss:{ ground: 0.45, side: 0.55, block: 0.55 },
+    colors:    {
+      bg:    '#f6f1e7',
+      ground:'#2b2b2b',
+      sling: '#6b4226',
+      rubber:'#6b4226',
+      proj:  '#c64545',
+      block: '#4a6fa5',
+      preview:'#2b2b2b'
+    }
+  };
+
+  // ====================================================================
+  // ESTADO — un objeto state; las mutaciones pasan por funciones
+  // ====================================================================
+  /** @typedef {{x:number,y:number,vx:number,vy:number,alive:boolean,active:boolean}} Projectile */
+  /** @typedef {{x:number,y:number,w:number,h:number,vy:number,alive:boolean}} Block */
+  /** @typedef {{x:number,y:number,dragging:boolean,dragX:number,dragY:number}} Sling */
+  /** @typedef {{launches:number,knocked:number,total:number,completed:boolean,restMs:number}} Stats */
+
+  const state = {
+    /** @type {Projectile} */
+    projectile: makeProjectileAtRest(),
+    /** @type {Block[]} */
+    blocks: [],
+    /** @type {Sling} */
+    slingshot: {
+      x: CONFIG.sling.x,
+      y: CONFIG.sling.y,
+      dragging: false,
+      dragX: CONFIG.sling.x,
+      dragY: CONFIG.sling.y
+    },
+    /** @type {Stats} */
+    stats: { launches: 0, knocked: 0, total: 0, completed: false, restMs: 0 }
+  };
+
+  function makeProjectileAtRest() {
+    return {
+      x: CONFIG.sling.x,
+      y: CONFIG.sling.y,
+      vx: 0, vy: 0,
+      alive: true,
+      active: false
+    };
+  }
+
+  function buildBlocks() {
+    const g = CONFIG.ground.y;
+    /** @type {Block[]} */
+    const blocks = [];
+    const add = (x, y, w, h) => blocks.push({ x, y, w, h, vy: 0, alive: true });
+
+    // Estructura A — torre vertical
+    add(560, g - 50, 50, 50);
+    add(560, g - 100, 50, 50);
+    add(560, g - 150, 50, 50);
+    add(560, g - 200, 50, 50);
+
+    // Estructura B — pirámide
+    const bx = 680;
+    add(bx,       g - 40, 40, 40);
+    add(bx + 40,  g - 40, 40, 40);
+    add(bx + 80,  g - 40, 40, 40);
+    add(bx + 20,  g - 80, 40, 40);
+    add(bx + 60,  g - 80, 40, 40);
+    add(bx + 40,  g - 120, 40, 40);
+
+    // Estructura C — par horizontal apilado
+    add(820, g - 30, 60, 30);
+    add(820, g - 60, 60, 30);
+
+    return blocks;
+  }
+
+  function resetGame() {
+    state.projectile = makeProjectileAtRest();
+    state.blocks = buildBlocks();
+    state.slingshot.dragging = false;
+    state.slingshot.dragX = CONFIG.sling.x;
+    state.slingshot.dragY = CONFIG.sling.y;
+    state.stats.launches = 0;
+    state.stats.knocked = 0;
+    state.stats.total = state.blocks.length;
+    state.stats.completed = false;
+    state.stats.restMs = 0;
+    hideOverlay();
+    syncHud();
+  }
+
+  function discardProjectile() {
+    state.projectile = makeProjectileAtRest();
+  }
+
+  // ====================================================================
+  // FÍSICA — funciones puras-ish: muto state pero no toco render ni input
+  // ====================================================================
+  function update(dt) {
+    if (state.stats.completed) return;
+    updateProjectile(dt);
+    updateBlocks(dt);
+    checkCompletion();
+  }
+
+  function updateProjectile(dt) {
+    const p = state.projectile;
+    if (!p.active) return;
+
+    p.vy += CONFIG.gravity * dt;
+    p.x  += p.vx * dt;
+    p.y  += p.vy * dt;
+
+    // Colisión con suelo
+    const groundY = CONFIG.ground.y;
+    if (p.y + CONFIG.projectile.r >= groundY) {
+      p.y = groundY - CONFIG.projectile.r;
+      p.vy = -Math.abs(p.vy) * CONFIG.energyLoss.ground;
+      p.vx *= 0.9;
+    }
+
+    // Paredes laterales: el lado izquierdo descarta (proyectil escapó hacia atrás);
+    // el derecho descarta también (escapó).
+    const margin = CONFIG.bounds.offCanvasMargin;
+    if (p.x < -margin || p.x > CONFIG.canvas.w + margin || p.y < -200) {
+      discardProjectile();
+      return;
+    }
+
+    // Colisión proyectil-bloque (círculo vs AABB)
+    for (const b of state.blocks) {
+      if (!b.alive) continue;
+      collideProjectileWithBlock(p, b);
+    }
+
+    // Reposo: si el proyectil casi no se mueve durante un tiempo, descartar
+    const speedSq = p.vx * p.vx + p.vy * p.vy;
+    if (speedSq < CONFIG.projectile.restThreshold * CONFIG.projectile.restThreshold) {
+      state.stats.restMs += dt * 1000;
+      if (state.stats.restMs > CONFIG.projectile.restTimeMs) {
+        discardProjectile();
+        state.stats.restMs = 0;
+      }
+    } else {
+      state.stats.restMs = 0;
+    }
+  }
+
+  function collideProjectileWithBlock(p, b) {
+    const r = CONFIG.projectile.r;
+    const closestX = clamp(p.x, b.x, b.x + b.w);
+    const closestY = clamp(p.y, b.y, b.y + b.h);
+    const dx = p.x - closestX;
+    const dy = p.y - closestY;
+    if (dx * dx + dy * dy >= r * r) return;
+
+    // Decidir eje de impacto según penetración
+    const penX = r - Math.abs(dx);
+    const penY = r - Math.abs(dy);
+    if (penX < penY) {
+      p.vx = -p.vx * CONFIG.energyLoss.block;
+      p.x += dx >= 0 ? penX : -penX;
+    } else {
+      p.vy = -p.vy * CONFIG.energyLoss.block;
+      p.y += dy >= 0 ? penY : -penY;
+      // si el impacto vino desde arriba, empujar el bloque hacia abajo levemente
+      if (dy < 0) b.vy += 80;
+    }
+
+    // El bloque se "derriba" en este modelo simple cuando lo tocan con suficiente energía
+    const impactEnergy = Math.hypot(p.vx, p.vy);
+    if (impactEnergy > 250) {
+      knockBlock(b);
+    }
+  }
+
+  function knockBlock(b) {
+    if (!b.alive) return;
+    b.alive = false;
+    state.stats.knocked += 1;
+  }
+
+  function updateBlocks(dt) {
+    // Bloques sin soporte caen. "Soporte" = otro bloque vivo justo debajo, o el suelo.
+    for (const b of state.blocks) {
+      if (!b.alive) continue;
+      if (hasSupport(b)) {
+        b.vy = 0;
+        // snap al soporte para evitar drift
+        const supportTop = topOfSupport(b);
+        if (supportTop !== null) b.y = supportTop - b.h;
+        continue;
+      }
+      b.vy += CONFIG.gravity * dt;
+      b.y  += b.vy * dt;
+
+      // si se cae por debajo del suelo, contar como derribado
+      if (b.y > CONFIG.canvas.h) {
+        knockBlock(b);
+      }
+    }
+  }
+
+  function hasSupport(block) {
+    return topOfSupport(block) !== null;
+  }
+
+  function topOfSupport(block) {
+    const tolerance = 2;
+    // suelo
+    if (block.y + block.h >= CONFIG.ground.y - tolerance) {
+      return CONFIG.ground.y;
+    }
+    // otro bloque debajo, con overlap horizontal
+    for (const other of state.blocks) {
+      if (other === block || !other.alive) continue;
+      const horizontalOverlap =
+        block.x < other.x + other.w && block.x + block.w > other.x;
+      const verticallyTouching =
+        Math.abs((block.y + block.h) - other.y) <= tolerance;
+      if (horizontalOverlap && verticallyTouching) return other.y;
+    }
+    return null;
+  }
+
+  function checkCompletion() {
+    const remaining = state.blocks.filter((b) => b.alive).length;
+    if (remaining === 0 && !state.stats.completed) {
+      state.stats.completed = true;
+      showOverlay(`¡Completado en ${state.stats.launches} lanzamiento${state.stats.launches === 1 ? '' : 's'}!`);
+    }
+  }
+
+  function clamp(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+
+  // ====================================================================
+  // RENDER — recibe state, dibuja. Nunca muta.
+  // ====================================================================
+  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('c'));
+  const ctx = canvas.getContext('2d');
+
+  function render() {
+    ctx.fillStyle = CONFIG.colors.bg;
+    ctx.fillRect(0, 0, CONFIG.canvas.w, CONFIG.canvas.h);
+    drawGround();
+    drawBlocks();
+    drawSlingshot();
+    drawProjectile();
+    if (state.slingshot.dragging) drawPullPreview();
+  }
+
+  function drawGround() {
+    ctx.fillStyle = CONFIG.colors.ground;
+    ctx.fillRect(0, CONFIG.ground.y, CONFIG.canvas.w, CONFIG.ground.thickness);
+  }
+
+  function drawSlingshot() {
+    const { x, y } = CONFIG.sling;
+    ctx.strokeStyle = CONFIG.colors.sling;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - 18, CONFIG.ground.y);
+    ctx.lineTo(x - 6, y);
+    ctx.moveTo(x + 18, CONFIG.ground.y);
+    ctx.lineTo(x + 6, y);
+    ctx.stroke();
+
+    // Goma cuando el jugador está arrastrando
+    if (state.slingshot.dragging && !state.projectile.active) {
+      ctx.strokeStyle = CONFIG.colors.rubber;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x - 6, y);
+      ctx.lineTo(state.projectile.x, state.projectile.y);
+      ctx.lineTo(x + 6, y);
+      ctx.stroke();
+    }
+  }
+
+  function drawProjectile() {
+    const p = state.projectile;
+    if (!p.alive) return;
+    ctx.fillStyle = CONFIG.colors.proj;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, CONFIG.projectile.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawBlocks() {
+    ctx.fillStyle = CONFIG.colors.block;
+    for (const b of state.blocks) {
+      if (!b.alive) continue;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+  }
+
+  function drawPullPreview() {
+    const p = state.projectile;
+    const dx = CONFIG.sling.x - p.x;
+    const dy = CONFIG.sling.y - p.y;
+    const vx = dx * CONFIG.pull.power;
+    const vy = dy * CONFIG.pull.power;
+
+    ctx.strokeStyle = CONFIG.colors.preview;
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let simX = p.x, simY = p.y, simVx = vx, simVy = vy;
+    ctx.moveTo(simX, simY);
+    const steps = 24, stepDt = 0.04;
+    for (let i = 0; i < steps; i++) {
+      simVy += CONFIG.gravity * stepDt;
+      simX  += simVx * stepDt;
+      simY  += simVy * stepDt;
+      ctx.lineTo(simX, simY);
+      if (simY > CONFIG.ground.y) break;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ====================================================================
+  // INPUT — handlers del mouse/touch. Actualizan state, nada más.
+  // ====================================================================
+  function getPointer(e) {
+    const r = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
+
+  function onPointerDown(e) {
+    if (state.stats.completed) return;
+    if (state.projectile.active) return;
+    const pos = getPointer(e);
+    const p = state.projectile;
+    const dx = pos.x - p.x;
+    const dy = pos.y - p.y;
+    const tolerance = CONFIG.projectile.r + 10;
+    if (dx * dx + dy * dy > tolerance * tolerance) return;   // drag fuera del proyectil: ignorar
+    state.slingshot.dragging = true;
+    e.preventDefault();
+  }
+
+  function onPointerMove(e) {
+    if (!state.slingshot.dragging) return;
+    const pos = getPointer(e);
+    let dx = pos.x - CONFIG.sling.x;
+    let dy = pos.y - CONFIG.sling.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > CONFIG.pull.max) {
+      dx = dx * CONFIG.pull.max / dist;
+      dy = dy * CONFIG.pull.max / dist;
+    }
+    state.projectile.x = CONFIG.sling.x + dx;
+    state.projectile.y = CONFIG.sling.y + dy;
+    e.preventDefault();
+  }
+
+  function onPointerUp(e) {
+    if (!state.slingshot.dragging) return;
+    state.slingshot.dragging = false;
+    const p = state.projectile;
+    const pullX = CONFIG.sling.x - p.x;
+    const pullY = CONFIG.sling.y - p.y;
+    // si el estiramiento fue insignificante, no contar como lanzamiento
+    if (Math.hypot(pullX, pullY) < 8) {
+      p.x = CONFIG.sling.x;
+      p.y = CONFIG.sling.y;
+      return;
+    }
+    p.vx = pullX * CONFIG.pull.power;
+    p.vy = pullY * CONFIG.pull.power;
+    p.active = true;
+    state.stats.launches += 1;
+    syncHud();
+    if (e) e.preventDefault();
+  }
+
+  canvas.addEventListener('mousedown', onPointerDown);
+  canvas.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+  canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+  canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+  canvas.addEventListener('touchend', onPointerUp);
+
+  document.getElementById('reset').addEventListener('click', resetGame);
+  document.getElementById('overlay-btn').addEventListener('click', resetGame);
+
+  // ====================================================================
+  // HUD + overlay
+  // ====================================================================
+  const launchesEl = document.getElementById('launches');
+  const knockedEl  = document.getElementById('knocked');
+  const totalEl    = document.getElementById('total');
+  const overlayEl  = document.getElementById('overlay');
+  const overlayMsg = document.getElementById('overlay-msg');
+
+  function syncHud() {
+    launchesEl.textContent = String(state.stats.launches);
+    knockedEl.textContent  = String(state.stats.knocked);
+    totalEl.textContent    = String(state.stats.total);
+  }
+  function showOverlay(msg) {
+    overlayMsg.textContent = msg;
+    overlayEl.classList.add('show');
+  }
+  function hideOverlay() {
+    overlayEl.classList.remove('show');
+  }
+
+  // ====================================================================
+  // Game loop — input ya capturado por event listeners; update + render acá
+  // ====================================================================
+  let lastT = performance.now();
+  function frame(now) {
+    // dt en segundos, capeado para evitar saltos enormes al perder foco de la pestaña
+    const dt = Math.min((now - lastT) / 1000, 1 / 30);
+    lastT = now;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  resetGame();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

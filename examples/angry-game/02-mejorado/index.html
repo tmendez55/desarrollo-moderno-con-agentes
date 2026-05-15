@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Resortera — 02 mejorado</title>
+<style>
+  body { margin: 0; background: #f0f0f0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  h1 { margin: 0 0 10px; font-size: 18px; color: #333; }
+  .hud { margin-bottom: 10px; color: #333; }
+  canvas { background: #ffffff; border: 1px solid #cccccc; display: block; }
+  .hint { margin-top: 10px; font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+  <h1>Resortera</h1>
+  <div class="hud">
+    Lanzamientos: <span id="launches">0</span> |
+    Bloques derribados: <span id="knocked">0</span>
+  </div>
+  <canvas id="c" width="800" height="500"></canvas>
+  <div class="hint">Arrastrá el proyectil hacia atrás y soltá para lanzar.</div>
+
+<script>
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var launchesEl = document.getElementById('launches');
+  var knockedEl = document.getElementById('knocked');
+
+  var W = canvas.width;
+  var H = canvas.height;
+
+  var GRAVITY = 600;          // px/s^2
+  var GROUND_Y = H - 30;
+  var SLING_X = 110;
+  var SLING_Y = GROUND_Y - 40;
+  var PROJECTILE_R = 12;
+  var MAX_PULL = 120;         // px de estiramiento máximo
+  var POWER = 6;              // multiplicador del estiramiento a velocidad
+
+  var COLORS = {
+    bg: '#ffffff',
+    ground: '#444444',
+    sling: '#222222',
+    rubber: '#888888',
+    proj: '#d24b4b',
+    block: '#5a8fbb'
+  };
+
+  var launches = 0;
+  var knocked = 0;
+
+  var projectile = {
+    x: SLING_X, y: SLING_Y,
+    vx: 0, vy: 0,
+    flying: false,
+    dragging: false
+  };
+
+  // 3 estructuras de bloques rectangulares a la derecha
+  var blocks = [];
+  function buildBlocks() {
+    blocks = [];
+    // estructura A — torre vertical
+    addBlock(500, GROUND_Y - 40, 40, 40);
+    addBlock(500, GROUND_Y - 80, 40, 40);
+    addBlock(500, GROUND_Y - 120, 40, 40);
+    // estructura B — pirámide
+    addBlock(600, GROUND_Y - 30, 30, 30);
+    addBlock(630, GROUND_Y - 30, 30, 30);
+    addBlock(660, GROUND_Y - 30, 30, 30);
+    addBlock(615, GROUND_Y - 60, 30, 30);
+    addBlock(645, GROUND_Y - 60, 30, 30);
+    addBlock(630, GROUND_Y - 90, 30, 30);
+    // estructura C — par horizontal
+    addBlock(720, GROUND_Y - 25, 50, 25);
+    addBlock(720, GROUND_Y - 50, 50, 25);
+  }
+  function addBlock(x, y, w, h) {
+    blocks.push({ x: x, y: y, w: w, h: h, alive: true });
+  }
+
+  function resetProjectile() {
+    projectile.x = SLING_X;
+    projectile.y = SLING_Y;
+    projectile.vx = 0;
+    projectile.vy = 0;
+    projectile.flying = false;
+    projectile.dragging = false;
+  }
+
+  // -------- input --------
+  canvas.addEventListener('mousedown', function (e) {
+    if (projectile.flying) return;
+    var p = mouse(e);
+    var dx = p.x - projectile.x;
+    var dy = p.y - projectile.y;
+    if (dx * dx + dy * dy <= (PROJECTILE_R + 6) * (PROJECTILE_R + 6)) {
+      projectile.dragging = true;
+    }
+  });
+
+  canvas.addEventListener('mousemove', function (e) {
+    if (!projectile.dragging) return;
+    var p = mouse(e);
+    var dx = p.x - SLING_X;
+    var dy = p.y - SLING_Y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > MAX_PULL) {
+      dx = dx * MAX_PULL / dist;
+      dy = dy * MAX_PULL / dist;
+    }
+    projectile.x = SLING_X + dx;
+    projectile.y = SLING_Y + dy;
+  });
+
+  canvas.addEventListener('mouseup', function () {
+    if (!projectile.dragging) return;
+    projectile.dragging = false;
+    var pullX = SLING_X - projectile.x;
+    var pullY = SLING_Y - projectile.y;
+    projectile.vx = pullX * POWER;
+    projectile.vy = pullY * POWER;
+    projectile.flying = true;
+    launches++;
+    launchesEl.textContent = launches;
+  });
+
+  function mouse(e) {
+    var r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  // -------- update --------
+  var lastT = performance.now();
+  function step(now) {
+    var dt = Math.min((now - lastT) / 1000, 0.033);
+    lastT = now;
+    update(dt);
+    render();
+    requestAnimationFrame(step);
+  }
+
+  function update(dt) {
+    if (!projectile.flying) return;
+
+    projectile.vy += GRAVITY * dt;
+    projectile.x += projectile.vx * dt;
+    projectile.y += projectile.vy * dt;
+
+    // colisión contra el suelo
+    if (projectile.y + PROJECTILE_R >= GROUND_Y) {
+      // simplemente detener al tocar el suelo
+      resetProjectile();
+      return;
+    }
+
+    // colisión con bloques (AABB vs círculo aproximado por bounding box)
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
+      if (!b.alive) continue;
+      if (projectile.x + PROJECTILE_R > b.x &&
+          projectile.x - PROJECTILE_R < b.x + b.w &&
+          projectile.y + PROJECTILE_R > b.y &&
+          projectile.y - PROJECTILE_R < b.y + b.h) {
+        b.alive = false;
+        knocked++;
+        knockedEl.textContent = knocked;
+        // pérdida de energía simple
+        projectile.vx *= 0.6;
+        projectile.vy *= 0.6;
+      }
+    }
+
+    // si sale por los lados / por arriba, descartar
+    if (projectile.x < -20 || projectile.x > W + 20 || projectile.y < -100) {
+      resetProjectile();
+    }
+  }
+
+  // -------- render --------
+  function render() {
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // suelo
+    ctx.fillStyle = COLORS.ground;
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+
+    // resortera: dos palos en forma de "Y"
+    ctx.strokeStyle = COLORS.sling;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(SLING_X - 12, GROUND_Y);
+    ctx.lineTo(SLING_X - 4, SLING_Y);
+    ctx.moveTo(SLING_X + 12, GROUND_Y);
+    ctx.lineTo(SLING_X + 4, SLING_Y);
+    ctx.stroke();
+
+    // goma si está arrastrando
+    if (!projectile.flying) {
+      ctx.strokeStyle = COLORS.rubber;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(SLING_X - 4, SLING_Y);
+      ctx.lineTo(projectile.x, projectile.y);
+      ctx.lineTo(SLING_X + 4, SLING_Y);
+      ctx.stroke();
+    }
+
+    // bloques
+    ctx.fillStyle = COLORS.block;
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
+      if (!b.alive) continue;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+
+    // proyectil
+    ctx.fillStyle = COLORS.proj;
+    ctx.beginPath();
+    ctx.arc(projectile.x, projectile.y, PROJECTILE_R, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  buildBlocks();
+  requestAnimationFrame(step);
+</script>
+</body>
+</html>

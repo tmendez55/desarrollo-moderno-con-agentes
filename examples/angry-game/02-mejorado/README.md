@@ -31,4 +31,4 @@ frameworks) donde:
 
 ## Archivo
 
-AQUÍ VA EL ARCHIVO `index.html` (pendiente de generar)
+Ver [`index.html`](./index.html) en esta misma carpeta.
