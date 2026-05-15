@@ -54,13 +54,13 @@
   var totalEl    = document.getElementById('total');
   var resetBtn   = document.getElementById('reset');
 
-  var GRAVITY = 1200;
+  var GRAVITY = 1100;
   var GROUND_Y = 540;
   var SLING_X = 130;
   var SLING_Y = 460;
   var PROJECTILE_R = 14;
-  var MAX_PULL = 150;
-  var POWER = 7;
+  var MAX_PULL = 170;
+  var POWER = 9.5;
   var REST_SPEED = 30;
   var REST_MS = 600;
 
@@ -169,6 +169,13 @@
     var p = getLogicalPointer(e);
     var dx = p.x - SLING_X;
     var dy = p.y - SLING_Y;
+    // restringir al hemisferio "atrás" de la sling: solo se puede cargar
+    // hacia la izquierda. Esto evita disparar al revés.
+    if (dx > 0) dx = 0;
+    // limitar para que el proyectil no baje del suelo
+    if (SLING_Y + dy > GROUND_Y - PROJECTILE_R - 4) {
+      dy = GROUND_Y - PROJECTILE_R - 4 - SLING_Y;
+    }
     var dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > MAX_PULL) {
       dx = dx * MAX_PULL / dist;

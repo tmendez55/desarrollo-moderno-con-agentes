@@ -129,11 +129,11 @@
   // ====================================================================
   const CONFIG = {
     logical:    { w: 1200, h: 800 },          // resolución lógica fija
-    gravity:    1800,                          // px/s^2 (en coords lógicas)
+    gravity:    1500,                          // px/s^2 (en coords lógicas)
     ground:     { y: 720 },
     sling:      { x: 160, y: 580 },
     projectile: { r: 18, restThreshold: 28, restTimeMs: 500 },
-    pull:       { max: 220, power: 6.8 },
+    pull:       { max: 240, power: 9.5 },
     bounds:     { margin: 60 },
     energyLoss: { ground: 0.42, block: 0.55 },
     knockEnergyThreshold: 220,
@@ -625,6 +625,13 @@
     const pos = getLogicalPointer(e);
     let dx = pos.x - CONFIG.sling.x;
     let dy = pos.y - CONFIG.sling.y;
+    // restringir al hemisferio "atrás" de la sling: el proyectil no
+    // puede pasar a la derecha de la sling. Si el jugador arrastra
+    // hacia adelante, lo clampeamos en x = 0 relativo.
+    if (dx > 0) dx = 0;
+    // limitar verticalmente para que no atraviese el suelo
+    const maxDy = CONFIG.ground.y - CONFIG.sling.y - CONFIG.projectile.r - 6;
+    if (dy > maxDy) dy = maxDy;
     const dist = Math.hypot(dx, dy);
     if (dist > CONFIG.pull.max) {
       dx = dx * CONFIG.pull.max / dist;
