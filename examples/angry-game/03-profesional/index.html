@@ -5,45 +5,72 @@
 <title>Resortera — 03 profesional</title>
 <style>
   :root {
-    --bg: #f6f1e7;
-    --fg: #2b2b2b;
-    --sling: #6b4226;
-    --proj: #c64545;
-    --block: #4a6fa5;
-    --accent: #2e8b57;
+    --bg:     #efe4cf;
+    --sky:    #d8c69a;
+    --ground: #5b3a1d;
+    --grass:  #6a8f3c;
+    --sling:  #3d2310;
+    --proj:   #c1432f;
+    --block:  #3f6fa3;
+    --block-edge: #2a4d75;
+    --fg:     #1f1a14;
+    --accent: #c98a2b;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
-    background: var(--bg);
+    background: linear-gradient(180deg, #f4ead6 0%, var(--bg) 100%);
     color: var(--fg);
-    font: 14px/1.4 system-ui, -apple-system, sans-serif;
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 16px;
+    padding: 18px 12px;
+    min-height: 100vh;
   }
-  h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
   .hud {
     display: flex;
-    gap: 16px;
+    gap: 18px;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
   }
-  .hud .stat { font-variant-numeric: tabular-nums; }
+  .hud .stat strong { font-size: 16px; color: var(--accent); }
   .hud button {
-    border: 1.5px solid var(--fg);
+    border: 2px solid var(--fg);
     background: transparent;
     color: var(--fg);
-    padding: 4px 12px;
+    padding: 5px 14px;
     font: inherit;
+    font-weight: 600;
     cursor: pointer;
+    letter-spacing: 0.02em;
   }
   .hud button:hover { background: var(--fg); color: var(--bg); }
+  .hud button[aria-pressed="true"] {
+    background: var(--fg); color: var(--bg);
+  }
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 1200px;
+    aspect-ratio: 3 / 2;
+    border: 2.5px solid var(--fg);
+    background: var(--sky);
+    box-shadow: 0 6px 0 rgba(31, 26, 20, 0.18);
+  }
   canvas {
-    background: var(--bg);
-    border: 1.5px solid var(--fg);
     display: block;
+    width: 100%;
+    height: 100%;
     touch-action: none;
   }
   .overlay {
@@ -52,30 +79,27 @@
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(246, 241, 231, 0.92);
+    background: rgba(239, 228, 207, 0.92);
   }
   .overlay.show { display: flex; }
   .overlay .panel {
     background: var(--bg);
-    border: 1.5px solid var(--fg);
-    padding: 24px 32px;
+    border: 2.5px solid var(--fg);
+    padding: 22px 30px;
     text-align: center;
+    box-shadow: 0 6px 0 rgba(31, 26, 20, 0.18);
   }
   .overlay button {
-    margin-top: 12px;
-    border: 1.5px solid var(--fg);
+    margin-top: 14px;
+    border: 2px solid var(--fg);
     background: transparent;
     color: var(--fg);
-    padding: 6px 16px;
+    padding: 7px 18px;
     font: inherit;
+    font-weight: 600;
     cursor: pointer;
   }
-  .stage {
-    position: relative;
-    width: 900px;
-    height: 600px;
-  }
-  .hint { margin-top: 10px; font-size: 12px; color: #777; }
+  .hint { margin-top: 12px; font-size: 12px; color: #6a5b48; text-align: center; }
 </style>
 </head>
 <body>
@@ -84,17 +108,18 @@
     <span class="stat">Lanzamientos: <strong id="launches">0</strong></span>
     <span class="stat">Bloques: <strong id="knocked">0</strong>/<strong id="total">0</strong></span>
     <button id="reset" type="button">Reiniciar</button>
+    <button id="mute" type="button" aria-pressed="false" aria-label="Mutear">🔊</button>
   </div>
   <div class="stage">
-    <canvas id="c" width="900" height="600"></canvas>
+    <canvas id="c"></canvas>
     <div id="overlay" class="overlay">
       <div class="panel">
-        <div id="overlay-msg" style="font-size: 18px;"></div>
+        <div id="overlay-msg" style="font-size: 18px; font-weight: 600;"></div>
         <button id="overlay-btn" type="button">Jugar de nuevo</button>
       </div>
     </div>
   </div>
-  <div class="hint">Arrastrá el proyectil hacia atrás y soltá para lanzar. La fuerza es proporcional al estiramiento.</div>
+  <div class="hint">Arrastrá el proyectil hacia atrás y soltá para lanzar. La trayectoria punteada predice el vuelo real.</div>
 
 <script>
 'use strict';
@@ -103,48 +128,44 @@
   // CONFIG — todas las constantes mágicas viven acá
   // ====================================================================
   const CONFIG = {
-    canvas:    { w: 900, h: 600 },
-    gravity:   1400,                // px/s^2
-    ground:    { y: 560, thickness: 4 },
-    sling:     { x: 130, y: 480, anchorOffset: 8 },
-    projectile:{ r: 14, restThreshold: 25, restTimeMs: 600 },
-    pull:      { max: 160, power: 7.5 },     // estiramiento máximo y multiplicador a velocidad
-    bounds:    { offCanvasMargin: 40 },
-    blockDrop: { settledEps: 0.5 },          // velocidad bajo la cual el bloque se considera apoyado
-    energyLoss:{ ground: 0.45, side: 0.55, block: 0.55 },
-    colors:    {
-      bg:    '#f6f1e7',
-      ground:'#2b2b2b',
-      sling: '#6b4226',
-      rubber:'#6b4226',
-      proj:  '#c64545',
-      block: '#4a6fa5',
-      preview:'#2b2b2b'
+    logical:    { w: 1200, h: 800 },          // resolución lógica fija
+    gravity:    1800,                          // px/s^2 (en coords lógicas)
+    ground:     { y: 720 },
+    sling:      { x: 160, y: 580 },
+    projectile: { r: 18, restThreshold: 28, restTimeMs: 500 },
+    pull:       { max: 220, power: 6.8 },
+    bounds:     { margin: 60 },
+    energyLoss: { ground: 0.42, block: 0.55 },
+    knockEnergyThreshold: 220,
+    physicsStepHz: 240,                        // sub-stepping para colisiones estables
+    preview:     { steps: 90, stepDt: 1 / 60 },
+    particles:   { count: 14, life: [280, 520], speed: [120, 380] },
+    colors: {
+      sky:        '#d8c69a',
+      ground:     '#5b3a1d',
+      groundLine: '#3d2310',
+      grass:      '#6a8f3c',
+      sling:      '#3d2310',
+      slingBand:  '#7a4a22',
+      rubber:     '#3d2310',
+      proj:       '#c1432f',
+      projShadow: 'rgba(31, 26, 20, 0.30)',
+      block:      '#3f6fa3',
+      blockEdge:  '#2a4d75',
+      preview:    'rgba(31, 26, 20, 0.55)',
+      previewDot: '#c1432f',
+      particle:   '#c98a2b'
     }
   };
 
   // ====================================================================
   // ESTADO — un objeto state; las mutaciones pasan por funciones
   // ====================================================================
-  /** @typedef {{x:number,y:number,vx:number,vy:number,alive:boolean,active:boolean}} Projectile */
-  /** @typedef {{x:number,y:number,w:number,h:number,vy:number,alive:boolean}} Block */
-  /** @typedef {{x:number,y:number,dragging:boolean,dragX:number,dragY:number}} Sling */
-  /** @typedef {{launches:number,knocked:number,total:number,completed:boolean,restMs:number}} Stats */
-
   const state = {
-    /** @type {Projectile} */
     projectile: makeProjectileAtRest(),
-    /** @type {Block[]} */
     blocks: [],
-    /** @type {Sling} */
-    slingshot: {
-      x: CONFIG.sling.x,
-      y: CONFIG.sling.y,
-      dragging: false,
-      dragX: CONFIG.sling.x,
-      dragY: CONFIG.sling.y
-    },
-    /** @type {Stats} */
+    slingshot: { dragging: false },
+    particles: [],
     stats: { launches: 0, knocked: 0, total: 0, completed: false, restMs: 0 }
   };
 
@@ -153,35 +174,34 @@
       x: CONFIG.sling.x,
       y: CONFIG.sling.y,
       vx: 0, vy: 0,
-      alive: true,
       active: false
     };
   }
 
   function buildBlocks() {
     const g = CONFIG.ground.y;
-    /** @type {Block[]} */
     const blocks = [];
     const add = (x, y, w, h) => blocks.push({ x, y, w, h, vy: 0, alive: true });
 
     // Estructura A — torre vertical
-    add(560, g - 50, 50, 50);
-    add(560, g - 100, 50, 50);
-    add(560, g - 150, 50, 50);
-    add(560, g - 200, 50, 50);
+    add(720, g - 60, 60, 60);
+    add(720, g - 120, 60, 60);
+    add(720, g - 180, 60, 60);
+    add(720, g - 240, 60, 60);
 
     // Estructura B — pirámide
-    const bx = 680;
-    add(bx,       g - 40, 40, 40);
-    add(bx + 40,  g - 40, 40, 40);
-    add(bx + 80,  g - 40, 40, 40);
-    add(bx + 20,  g - 80, 40, 40);
-    add(bx + 60,  g - 80, 40, 40);
-    add(bx + 40,  g - 120, 40, 40);
+    const bx = 870;
+    add(bx,         g - 50, 50, 50);
+    add(bx + 50,    g - 50, 50, 50);
+    add(bx + 100,   g - 50, 50, 50);
+    add(bx + 25,    g - 100, 50, 50);
+    add(bx + 75,    g - 100, 50, 50);
+    add(bx + 50,    g - 150, 50, 50);
 
-    // Estructura C — par horizontal apilado
-    add(820, g - 30, 60, 30);
-    add(820, g - 60, 60, 30);
+    // Estructura C — torre delgada
+    add(1080, g - 40, 50, 40);
+    add(1080, g - 80, 50, 40);
+    add(1080, g - 120, 50, 40);
 
     return blocks;
   }
@@ -190,8 +210,7 @@
     state.projectile = makeProjectileAtRest();
     state.blocks = buildBlocks();
     state.slingshot.dragging = false;
-    state.slingshot.dragX = CONFIG.sling.x;
-    state.slingshot.dragY = CONFIG.sling.y;
+    state.particles.length = 0;
     state.stats.launches = 0;
     state.stats.knocked = 0;
     state.stats.total = state.blocks.length;
@@ -203,15 +222,88 @@
 
   function discardProjectile() {
     state.projectile = makeProjectileAtRest();
+    state.stats.restMs = 0;
+  }
+
+  function knockBlock(b) {
+    if (!b.alive) return;
+    b.alive = false;
+    state.stats.knocked += 1;
+    spawnParticles(b.x + b.w / 2, b.y + b.h / 2);
+    Audio.play('hit');
+  }
+
+  function spawnParticles(x, y) {
+    const { count, life, speed } = CONFIG.particles;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const v = speed[0] + Math.random() * (speed[1] - speed[0]);
+      state.particles.push({
+        x, y,
+        vx: Math.cos(angle) * v,
+        vy: Math.sin(angle) * v - 80,
+        life: 0,
+        maxLife: life[0] + Math.random() * (life[1] - life[0])
+      });
+    }
   }
 
   // ====================================================================
-  // FÍSICA — funciones puras-ish: muto state pero no toco render ni input
+  // FÍSICA — un solo `stepProjectile` se usa para el vuelo REAL y para
+  // la PREVIEW de trayectoria. Así la línea no miente.
   // ====================================================================
+  /**
+   * Avanza el proyectil un paso. Si choca con un bloque, devuelve el
+   * bloque chocado. Si rebota contra el suelo, lo refleja. La preview
+   * usa esta misma función pero con bloques clonados (sin tocar el
+   * estado real).
+   */
+  function stepProjectile(p, blocks, dt) {
+    p.vy += CONFIG.gravity * dt;
+    p.x  += p.vx * dt;
+    p.y  += p.vy * dt;
+
+    // Suelo
+    const groundY = CONFIG.ground.y;
+    if (p.y + CONFIG.projectile.r >= groundY) {
+      p.y = groundY - CONFIG.projectile.r;
+      p.vy = -Math.abs(p.vy) * CONFIG.energyLoss.ground;
+      p.vx *= 0.88;
+    }
+
+    // Colisión con bloques (círculo vs AABB)
+    for (const b of blocks) {
+      if (!b.alive) continue;
+      const r = CONFIG.projectile.r;
+      const cx = clamp(p.x, b.x, b.x + b.w);
+      const cy = clamp(p.y, b.y, b.y + b.h);
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      if (dx * dx + dy * dy >= r * r) continue;
+
+      const penX = r - Math.abs(dx);
+      const penY = r - Math.abs(dy);
+      if (penX < penY) {
+        p.vx = -p.vx * CONFIG.energyLoss.block;
+        p.x += dx >= 0 ? penX : -penX;
+      } else {
+        p.vy = -p.vy * CONFIG.energyLoss.block;
+        p.y += dy >= 0 ? penY : -penY;
+        if (dy < 0) b.vy += 90;
+      }
+      return b;
+    }
+    return null;
+  }
+
   function update(dt) {
-    if (state.stats.completed) return;
+    if (state.stats.completed) {
+      updateParticles(dt);
+      return;
+    }
     updateProjectile(dt);
     updateBlocks(dt);
+    updateParticles(dt);
     checkCompletion();
   }
 
@@ -219,133 +311,109 @@
     const p = state.projectile;
     if (!p.active) return;
 
-    p.vy += CONFIG.gravity * dt;
-    p.x  += p.vx * dt;
-    p.y  += p.vy * dt;
-
-    // Colisión con suelo
-    const groundY = CONFIG.ground.y;
-    if (p.y + CONFIG.projectile.r >= groundY) {
-      p.y = groundY - CONFIG.projectile.r;
-      p.vy = -Math.abs(p.vy) * CONFIG.energyLoss.ground;
-      p.vx *= 0.9;
+    // sub-stepping para evitar tunneling con bloques chicos a alta velocidad
+    const steps = Math.max(1, Math.ceil(dt * CONFIG.physicsStepHz));
+    const subDt = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const hit = stepProjectile(p, state.blocks, subDt);
+      if (hit) {
+        const impact = Math.hypot(p.vx, p.vy);
+        if (impact > CONFIG.knockEnergyThreshold) knockBlock(hit);
+      }
     }
 
-    // Paredes laterales: el lado izquierdo descarta (proyectil escapó hacia atrás);
-    // el derecho descarta también (escapó).
-    const margin = CONFIG.bounds.offCanvasMargin;
-    if (p.x < -margin || p.x > CONFIG.canvas.w + margin || p.y < -200) {
+    // descartar si sale del canvas
+    const m = CONFIG.bounds.margin;
+    if (p.x < -m || p.x > CONFIG.logical.w + m || p.y < -300) {
       discardProjectile();
       return;
     }
 
-    // Colisión proyectil-bloque (círculo vs AABB)
-    for (const b of state.blocks) {
-      if (!b.alive) continue;
-      collideProjectileWithBlock(p, b);
-    }
-
-    // Reposo: si el proyectil casi no se mueve durante un tiempo, descartar
-    const speedSq = p.vx * p.vx + p.vy * p.vy;
-    if (speedSq < CONFIG.projectile.restThreshold * CONFIG.projectile.restThreshold) {
+    // reposo
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed < CONFIG.projectile.restThreshold) {
       state.stats.restMs += dt * 1000;
-      if (state.stats.restMs > CONFIG.projectile.restTimeMs) {
-        discardProjectile();
-        state.stats.restMs = 0;
-      }
+      if (state.stats.restMs > CONFIG.projectile.restTimeMs) discardProjectile();
     } else {
       state.stats.restMs = 0;
     }
   }
 
-  function collideProjectileWithBlock(p, b) {
-    const r = CONFIG.projectile.r;
-    const closestX = clamp(p.x, b.x, b.x + b.w);
-    const closestY = clamp(p.y, b.y, b.y + b.h);
-    const dx = p.x - closestX;
-    const dy = p.y - closestY;
-    if (dx * dx + dy * dy >= r * r) return;
-
-    // Decidir eje de impacto según penetración
-    const penX = r - Math.abs(dx);
-    const penY = r - Math.abs(dy);
-    if (penX < penY) {
-      p.vx = -p.vx * CONFIG.energyLoss.block;
-      p.x += dx >= 0 ? penX : -penX;
-    } else {
-      p.vy = -p.vy * CONFIG.energyLoss.block;
-      p.y += dy >= 0 ? penY : -penY;
-      // si el impacto vino desde arriba, empujar el bloque hacia abajo levemente
-      if (dy < 0) b.vy += 80;
-    }
-
-    // El bloque se "derriba" en este modelo simple cuando lo tocan con suficiente energía
-    const impactEnergy = Math.hypot(p.vx, p.vy);
-    if (impactEnergy > 250) {
-      knockBlock(b);
-    }
-  }
-
-  function knockBlock(b) {
-    if (!b.alive) return;
-    b.alive = false;
-    state.stats.knocked += 1;
-  }
-
   function updateBlocks(dt) {
-    // Bloques sin soporte caen. "Soporte" = otro bloque vivo justo debajo, o el suelo.
     for (const b of state.blocks) {
       if (!b.alive) continue;
       if (hasSupport(b)) {
         b.vy = 0;
-        // snap al soporte para evitar drift
         const supportTop = topOfSupport(b);
         if (supportTop !== null) b.y = supportTop - b.h;
         continue;
       }
       b.vy += CONFIG.gravity * dt;
       b.y  += b.vy * dt;
-
-      // si se cae por debajo del suelo, contar como derribado
-      if (b.y > CONFIG.canvas.h) {
-        knockBlock(b);
-      }
+      if (b.y > CONFIG.logical.h) knockBlock(b);
     }
   }
 
-  function hasSupport(block) {
-    return topOfSupport(block) !== null;
-  }
+  function hasSupport(block) { return topOfSupport(block) !== null; }
 
   function topOfSupport(block) {
-    const tolerance = 2;
-    // suelo
-    if (block.y + block.h >= CONFIG.ground.y - tolerance) {
-      return CONFIG.ground.y;
-    }
-    // otro bloque debajo, con overlap horizontal
+    const tol = 2;
+    if (block.y + block.h >= CONFIG.ground.y - tol) return CONFIG.ground.y;
     for (const other of state.blocks) {
       if (other === block || !other.alive) continue;
       const horizontalOverlap =
         block.x < other.x + other.w && block.x + block.w > other.x;
       const verticallyTouching =
-        Math.abs((block.y + block.h) - other.y) <= tolerance;
+        Math.abs((block.y + block.h) - other.y) <= tol;
       if (horizontalOverlap && verticallyTouching) return other.y;
     }
     return null;
+  }
+
+  function updateParticles(dt) {
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const part = state.particles[i];
+      part.life += dt * 1000;
+      if (part.life >= part.maxLife) {
+        state.particles.splice(i, 1);
+        continue;
+      }
+      part.vy += CONFIG.gravity * dt * 0.7;
+      part.x  += part.vx * dt;
+      part.y  += part.vy * dt;
+    }
   }
 
   function checkCompletion() {
     const remaining = state.blocks.filter((b) => b.alive).length;
     if (remaining === 0 && !state.stats.completed) {
       state.stats.completed = true;
+      Audio.play('win');
       showOverlay(`¡Completado en ${state.stats.launches} lanzamiento${state.stats.launches === 1 ? '' : 's'}!`);
     }
   }
 
-  function clamp(v, lo, hi) {
-    return v < lo ? lo : v > hi ? hi : v;
+  /** Simula la trayectoria con la misma stepProjectile que el vuelo real. */
+  function computePreviewPath(initialVx, initialVy) {
+    const simP = {
+      x: CONFIG.sling.x, y: CONFIG.sling.y,
+      vx: initialVx, vy: initialVy, active: true
+    };
+    const simBlocks = state.blocks.map((b) => ({ ...b }));
+    const path = [{ x: simP.x, y: simP.y }];
+    for (let i = 0; i < CONFIG.preview.steps; i++) {
+      const hit = stepProjectile(simP, simBlocks, CONFIG.preview.stepDt);
+      path.push({ x: simP.x, y: simP.y });
+      if (hit) break;
+      if (simP.y + CONFIG.projectile.r >= CONFIG.ground.y - 1 &&
+          Math.abs(simP.vy) < 20) break;
+      const m = CONFIG.bounds.margin;
+      if (simP.x < -m || simP.x > CONFIG.logical.w + m) break;
+    }
+    return path;
   }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
   // ====================================================================
   // RENDER — recibe state, dibuja. Nunca muta.
@@ -353,113 +421,208 @@
   const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('c'));
   const ctx = canvas.getContext('2d');
 
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    // El canvas ahora dibuja en coords lógicas; el setTransform escala.
+    ctx.setTransform(
+      canvas.width / CONFIG.logical.w, 0, 0,
+      canvas.height / CONFIG.logical.h, 0, 0
+    );
+  }
+
   function render() {
-    ctx.fillStyle = CONFIG.colors.bg;
-    ctx.fillRect(0, 0, CONFIG.canvas.w, CONFIG.canvas.h);
+    const { w, h } = CONFIG.logical;
+    // cielo
+    ctx.fillStyle = CONFIG.colors.sky;
+    ctx.fillRect(0, 0, w, h);
+
     drawGround();
-    drawBlocks();
     drawSlingshot();
+    drawPreviewIfAny();
+    drawBlocks();
+    drawProjectileShadow();
     drawProjectile();
-    if (state.slingshot.dragging) drawPullPreview();
+    drawParticles();
   }
 
   function drawGround() {
+    const g = CONFIG.ground.y;
+    const { w, h } = CONFIG.logical;
+    // tierra
     ctx.fillStyle = CONFIG.colors.ground;
-    ctx.fillRect(0, CONFIG.ground.y, CONFIG.canvas.w, CONFIG.ground.thickness);
+    ctx.fillRect(0, g, w, h - g);
+    // pasto (franja superior)
+    ctx.fillStyle = CONFIG.colors.grass;
+    ctx.fillRect(0, g - 6, w, 6);
+    // textura: líneas horizontales tenues
+    ctx.strokeStyle = CONFIG.colors.groundLine;
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 1;
+    for (let y = g + 16; y < h; y += 22) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
 
   function drawSlingshot() {
     const { x, y } = CONFIG.sling;
+    const g = CONFIG.ground.y;
+    // brazo izquierdo y derecho (con grosor)
     ctx.strokeStyle = CONFIG.colors.sling;
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(x - 18, CONFIG.ground.y);
-    ctx.lineTo(x - 6, y);
-    ctx.moveTo(x + 18, CONFIG.ground.y);
-    ctx.lineTo(x + 6, y);
+    ctx.moveTo(x - 22, g);
+    ctx.lineTo(x - 8,  y);
+    ctx.moveTo(x + 22, g);
+    ctx.lineTo(x + 8,  y);
+    ctx.stroke();
+    // banda decorativa
+    ctx.strokeStyle = CONFIG.colors.slingBand;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 18, g - 18);
+    ctx.lineTo(x + 18, g - 18);
     ctx.stroke();
 
-    // Goma cuando el jugador está arrastrando
+    // goma cuando está cargada
     if (state.slingshot.dragging && !state.projectile.active) {
+      const p = state.projectile;
+      const stretch = Math.hypot(p.x - x, p.y - y);
+      const thickness = 2 + Math.min(6, stretch / 40);
       ctx.strokeStyle = CONFIG.colors.rubber;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = thickness;
       ctx.beginPath();
-      ctx.moveTo(x - 6, y);
-      ctx.lineTo(state.projectile.x, state.projectile.y);
-      ctx.lineTo(x + 6, y);
+      ctx.moveTo(x - 8, y);
+      ctx.lineTo(p.x, p.y);
+      ctx.lineTo(x + 8, y);
       ctx.stroke();
     }
   }
 
+  function drawPreviewIfAny() {
+    if (!state.slingshot.dragging || state.projectile.active) return;
+    const p = state.projectile;
+    const vx = (CONFIG.sling.x - p.x) * CONFIG.pull.power;
+    const vy = (CONFIG.sling.y - p.y) * CONFIG.pull.power;
+    const path = computePreviewPath(vx, vy);
+
+    // línea punteada
+    ctx.strokeStyle = CONFIG.colors.preview;
+    ctx.setLineDash([6, 10]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // punto final
+    const end = path[path.length - 1];
+    ctx.fillStyle = CONFIG.colors.previewDot;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(end.x, end.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawProjectileShadow() {
+    const p = state.projectile;
+    const g = CONFIG.ground.y;
+    const altitude = Math.max(0, g - p.y);
+    const r = CONFIG.projectile.r;
+    const shadowW = r * (1.4 - Math.min(0.8, altitude / 500));
+    const shadowH = Math.max(3, r * 0.35 - altitude / 300);
+    ctx.fillStyle = CONFIG.colors.projShadow;
+    ctx.beginPath();
+    ctx.ellipse(p.x, g - 2, shadowW, shadowH, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   function drawProjectile() {
     const p = state.projectile;
-    if (!p.alive) return;
+    const r = CONFIG.projectile.r;
     ctx.fillStyle = CONFIG.colors.proj;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, CONFIG.projectile.r, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // highlight pequeño para volumen
+    ctx.fillStyle = 'rgba(255,255,255,0.30)';
+    ctx.beginPath();
+    ctx.arc(p.x - r * 0.35, p.y - r * 0.35, r * 0.30, 0, Math.PI * 2);
     ctx.fill();
   }
 
   function drawBlocks() {
-    ctx.fillStyle = CONFIG.colors.block;
     for (const b of state.blocks) {
       if (!b.alive) continue;
+      ctx.fillStyle = CONFIG.colors.block;
       ctx.fillRect(b.x, b.y, b.w, b.h);
+      // borde
+      ctx.strokeStyle = CONFIG.colors.blockEdge;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+      // pequeña línea de "veta" para textura
+      ctx.strokeStyle = CONFIG.colors.blockEdge;
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath();
+      ctx.moveTo(b.x + 4, b.y + b.h / 2);
+      ctx.lineTo(b.x + b.w - 4, b.y + b.h / 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
 
-  function drawPullPreview() {
-    const p = state.projectile;
-    const dx = CONFIG.sling.x - p.x;
-    const dy = CONFIG.sling.y - p.y;
-    const vx = dx * CONFIG.pull.power;
-    const vy = dy * CONFIG.pull.power;
-
-    ctx.strokeStyle = CONFIG.colors.preview;
-    ctx.setLineDash([4, 6]);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    let simX = p.x, simY = p.y, simVx = vx, simVy = vy;
-    ctx.moveTo(simX, simY);
-    const steps = 24, stepDt = 0.04;
-    for (let i = 0; i < steps; i++) {
-      simVy += CONFIG.gravity * stepDt;
-      simX  += simVx * stepDt;
-      simY  += simVy * stepDt;
-      ctx.lineTo(simX, simY);
-      if (simY > CONFIG.ground.y) break;
+  function drawParticles() {
+    ctx.fillStyle = CONFIG.colors.particle;
+    for (const part of state.particles) {
+      const t = part.life / part.maxLife;
+      ctx.globalAlpha = 1 - t;
+      const size = 4 * (1 - t * 0.6);
+      ctx.beginPath();
+      ctx.arc(part.x, part.y, size, 0, Math.PI * 2);
+      ctx.fill();
     }
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   }
 
   // ====================================================================
-  // INPUT — handlers del mouse/touch. Actualizan state, nada más.
+  // INPUT — handlers de mouse/touch. Actualizan state, nada más.
+  // Mouseup/touchend en window: el drag funciona incluso si soltás fuera.
   // ====================================================================
-  function getPointer(e) {
-    const r = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - r.left, y: clientY - r.top };
+  function getLogicalPointer(e) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    return {
+      x: cx * CONFIG.logical.w / rect.width,
+      y: cy * CONFIG.logical.h / rect.height
+    };
   }
 
   function onPointerDown(e) {
     if (state.stats.completed) return;
     if (state.projectile.active) return;
-    const pos = getPointer(e);
+    const pos = getLogicalPointer(e);
     const p = state.projectile;
     const dx = pos.x - p.x;
     const dy = pos.y - p.y;
-    const tolerance = CONFIG.projectile.r + 10;
-    if (dx * dx + dy * dy > tolerance * tolerance) return;   // drag fuera del proyectil: ignorar
+    const tol = CONFIG.projectile.r + 14;
+    if (dx * dx + dy * dy > tol * tol) return;
     state.slingshot.dragging = true;
-    e.preventDefault();
+    Audio.ensure();
+    if (e.preventDefault) e.preventDefault();
   }
 
   function onPointerMove(e) {
     if (!state.slingshot.dragging) return;
-    const pos = getPointer(e);
+    const pos = getLogicalPointer(e);
     let dx = pos.x - CONFIG.sling.x;
     let dy = pos.y - CONFIG.sling.y;
     const dist = Math.hypot(dx, dy);
@@ -469,7 +632,7 @@
     }
     state.projectile.x = CONFIG.sling.x + dx;
     state.projectile.y = CONFIG.sling.y + dy;
-    e.preventDefault();
+    if (e.preventDefault) e.preventDefault();
   }
 
   function onPointerUp(e) {
@@ -478,8 +641,7 @@
     const p = state.projectile;
     const pullX = CONFIG.sling.x - p.x;
     const pullY = CONFIG.sling.y - p.y;
-    // si el estiramiento fue insignificante, no contar como lanzamiento
-    if (Math.hypot(pullX, pullY) < 8) {
+    if (Math.hypot(pullX, pullY) < 10) {
       p.x = CONFIG.sling.x;
       p.y = CONFIG.sling.y;
       return;
@@ -489,18 +651,75 @@
     p.active = true;
     state.stats.launches += 1;
     syncHud();
-    if (e) e.preventDefault();
+    Audio.play('launch');
+    if (e && e.preventDefault) e.preventDefault();
   }
 
   canvas.addEventListener('mousedown', onPointerDown);
-  canvas.addEventListener('mousemove', onPointerMove);
-  window.addEventListener('mouseup', onPointerUp);
   canvas.addEventListener('touchstart', onPointerDown, { passive: false });
-  canvas.addEventListener('touchmove', onPointerMove, { passive: false });
-  canvas.addEventListener('touchend', onPointerUp);
+  // mousemove/up en window: si soltás fuera del canvas, igual dispara
+  window.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+  window.addEventListener('touchmove', onPointerMove, { passive: false });
+  window.addEventListener('touchend', onPointerUp);
+  window.addEventListener('blur', () => { if (state.slingshot.dragging) onPointerUp(); });
 
   document.getElementById('reset').addEventListener('click', resetGame);
   document.getElementById('overlay-btn').addEventListener('click', resetGame);
+
+  // ====================================================================
+  // AUDIO — WebAudio puro, SFX generados en runtime, sin archivos
+  // ====================================================================
+  const Audio = (() => {
+    let ctxA = null;
+    let muted = false;
+    function ensure() {
+      if (ctxA) return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ctxA = new AC();
+    }
+    function envelopedTone(freqStart, freqEnd, durMs, type, gain) {
+      if (!ctxA || muted) return;
+      const now = ctxA.currentTime;
+      const osc = ctxA.createOscillator();
+      const g = ctxA.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), now + durMs / 1000);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(gain, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + durMs / 1000);
+      osc.connect(g).connect(ctxA.destination);
+      osc.start(now);
+      osc.stop(now + durMs / 1000 + 0.02);
+    }
+    function play(kind) {
+      ensure();
+      if (!ctxA || muted) return;
+      if (kind === 'launch') {
+        envelopedTone(420, 90, 180, 'square', 0.22);
+      } else if (kind === 'hit') {
+        const base = 140 + Math.random() * 90;
+        envelopedTone(base * 2, base, 140, 'triangle', 0.25);
+      } else if (kind === 'win') {
+        envelopedTone(523, 523, 160, 'sine', 0.18);
+        setTimeout(() => envelopedTone(659, 659, 160, 'sine', 0.18), 120);
+        setTimeout(() => envelopedTone(784, 784, 260, 'sine', 0.2), 240);
+      }
+    }
+    function setMuted(v) { muted = v; }
+    function isMuted() { return muted; }
+    return { ensure, play, setMuted, isMuted };
+  })();
+
+  const muteBtn = document.getElementById('mute');
+  muteBtn.addEventListener('click', () => {
+    Audio.ensure();
+    Audio.setMuted(!Audio.isMuted());
+    muteBtn.textContent = Audio.isMuted() ? '🔇' : '🔊';
+    muteBtn.setAttribute('aria-pressed', Audio.isMuted() ? 'true' : 'false');
+  });
 
   // ====================================================================
   // HUD + overlay
@@ -520,16 +739,13 @@
     overlayMsg.textContent = msg;
     overlayEl.classList.add('show');
   }
-  function hideOverlay() {
-    overlayEl.classList.remove('show');
-  }
+  function hideOverlay() { overlayEl.classList.remove('show'); }
 
   // ====================================================================
-  // Game loop — input ya capturado por event listeners; update + render acá
+  // Game loop
   // ====================================================================
   let lastT = performance.now();
   function frame(now) {
-    // dt en segundos, capeado para evitar saltos enormes al perder foco de la pestaña
     const dt = Math.min((now - lastT) / 1000, 1 / 30);
     lastT = now;
     update(dt);
@@ -537,6 +753,8 @@
     requestAnimationFrame(frame);
   }
 
+  window.addEventListener('resize', resize);
+  resize();
   resetGame();
   requestAnimationFrame(frame);
 })();

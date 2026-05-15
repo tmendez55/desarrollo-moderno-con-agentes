@@ -4,38 +4,65 @@
 <meta charset="UTF-8">
 <title>Resortera — 02 mejorado</title>
 <style>
-  body { margin: 0; background: #f0f0f0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  body {
+    margin: 0;
+    background: #f0f0f0;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    min-height: 100vh;
+  }
   h1 { margin: 0 0 10px; font-size: 18px; color: #333; }
   .hud { margin-bottom: 10px; color: #333; }
-  canvas { background: #ffffff; border: 1px solid #cccccc; display: block; }
-  .hint { margin-top: 10px; font-size: 12px; color: #666; }
+  .hud button {
+    margin-left: 8px;
+    padding: 3px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .wrap {
+    width: 100%;
+    max-width: 900px;
+    aspect-ratio: 3 / 2;
+    border: 1px solid #cccccc;
+    background: #ffffff;
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .hint { margin-top: 10px; font-size: 12px; color: #666; text-align: center; }
 </style>
 </head>
 <body>
   <h1>Resortera</h1>
   <div class="hud">
     Lanzamientos: <span id="launches">0</span> |
-    Bloques derribados: <span id="knocked">0</span>
+    Bloques: <span id="knocked">0</span>/<span id="total">0</span>
+    <button id="reset" type="button">Reiniciar</button>
   </div>
-  <canvas id="c" width="800" height="500"></canvas>
+  <div class="wrap"><canvas id="c"></canvas></div>
   <div class="hint">Arrastrá el proyectil hacia atrás y soltá para lanzar.</div>
 
 <script>
+  // Coordenadas lógicas fijas; el render se escala al tamaño del canvas.
+  var LW = 900, LH = 600;
+
   var canvas = document.getElementById('c');
   var ctx = canvas.getContext('2d');
   var launchesEl = document.getElementById('launches');
-  var knockedEl = document.getElementById('knocked');
+  var knockedEl  = document.getElementById('knocked');
+  var totalEl    = document.getElementById('total');
+  var resetBtn   = document.getElementById('reset');
 
-  var W = canvas.width;
-  var H = canvas.height;
-
-  var GRAVITY = 600;          // px/s^2
-  var GROUND_Y = H - 30;
-  var SLING_X = 110;
-  var SLING_Y = GROUND_Y - 40;
-  var PROJECTILE_R = 12;
-  var MAX_PULL = 120;         // px de estiramiento máximo
-  var POWER = 6;              // multiplicador del estiramiento a velocidad
+  var GRAVITY = 1200;
+  var GROUND_Y = 540;
+  var SLING_X = 130;
+  var SLING_Y = 460;
+  var PROJECTILE_R = 14;
+  var MAX_PULL = 150;
+  var POWER = 7;
+  var REST_SPEED = 30;
+  var REST_MS = 600;
 
   var COLORS = {
     bg: '#ffffff',
@@ -53,27 +80,30 @@
     x: SLING_X, y: SLING_Y,
     vx: 0, vy: 0,
     flying: false,
-    dragging: false
+    dragging: false,
+    restMs: 0
   };
 
-  // 3 estructuras de bloques rectangulares a la derecha
   var blocks = [];
+
   function buildBlocks() {
     blocks = [];
+    var g = GROUND_Y;
     // estructura A — torre vertical
-    addBlock(500, GROUND_Y - 40, 40, 40);
-    addBlock(500, GROUND_Y - 80, 40, 40);
-    addBlock(500, GROUND_Y - 120, 40, 40);
+    addBlock(560, g - 50,  50, 50);
+    addBlock(560, g - 100, 50, 50);
+    addBlock(560, g - 150, 50, 50);
+    addBlock(560, g - 200, 50, 50);
     // estructura B — pirámide
-    addBlock(600, GROUND_Y - 30, 30, 30);
-    addBlock(630, GROUND_Y - 30, 30, 30);
-    addBlock(660, GROUND_Y - 30, 30, 30);
-    addBlock(615, GROUND_Y - 60, 30, 30);
-    addBlock(645, GROUND_Y - 60, 30, 30);
-    addBlock(630, GROUND_Y - 90, 30, 30);
+    addBlock(680, g - 40, 40, 40);
+    addBlock(720, g - 40, 40, 40);
+    addBlock(760, g - 40, 40, 40);
+    addBlock(700, g - 80, 40, 40);
+    addBlock(740, g - 80, 40, 40);
+    addBlock(720, g - 120, 40, 40);
     // estructura C — par horizontal
-    addBlock(720, GROUND_Y - 25, 50, 25);
-    addBlock(720, GROUND_Y - 50, 50, 25);
+    addBlock(820, g - 30, 60, 30);
+    addBlock(820, g - 60, 60, 30);
   }
   function addBlock(x, y, w, h) {
     blocks.push({ x: x, y: y, w: w, h: h, alive: true });
@@ -86,22 +116,57 @@
     projectile.vy = 0;
     projectile.flying = false;
     projectile.dragging = false;
+    projectile.restMs = 0;
   }
 
-  // -------- input --------
-  canvas.addEventListener('mousedown', function (e) {
+  function resetGame() {
+    resetProjectile();
+    buildBlocks();
+    launches = 0;
+    knocked = 0;
+    syncHud();
+  }
+
+  function syncHud() {
+    launchesEl.textContent = launches;
+    knockedEl.textContent = knocked;
+    totalEl.textContent = blocks.length;
+  }
+
+  // --- canvas responsive: backing store según devicePixelRatio + escala lógica
+  function resize() {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(canvas.width / LW, canvas.height / LH);
+  }
+  window.addEventListener('resize', resize);
+
+  // --- input
+  function getLogicalPointer(e) {
+    var rect = canvas.getBoundingClientRect();
+    var cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    var cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    return { x: cx * LW / rect.width, y: cy * LH / rect.height };
+  }
+
+  function onDown(e) {
     if (projectile.flying) return;
-    var p = mouse(e);
+    var p = getLogicalPointer(e);
     var dx = p.x - projectile.x;
     var dy = p.y - projectile.y;
-    if (dx * dx + dy * dy <= (PROJECTILE_R + 6) * (PROJECTILE_R + 6)) {
+    var tol = PROJECTILE_R + 12;
+    if (dx * dx + dy * dy <= tol * tol) {
       projectile.dragging = true;
+      e.preventDefault();
     }
-  });
+  }
 
-  canvas.addEventListener('mousemove', function (e) {
+  function onMove(e) {
     if (!projectile.dragging) return;
-    var p = mouse(e);
+    var p = getLogicalPointer(e);
     var dx = p.x - SLING_X;
     var dy = p.y - SLING_Y;
     var dist = Math.sqrt(dx * dx + dy * dy);
@@ -111,29 +176,40 @@
     }
     projectile.x = SLING_X + dx;
     projectile.y = SLING_Y + dy;
-  });
+    e.preventDefault();
+  }
 
-  canvas.addEventListener('mouseup', function () {
+  function onUp() {
     if (!projectile.dragging) return;
     projectile.dragging = false;
     var pullX = SLING_X - projectile.x;
     var pullY = SLING_Y - projectile.y;
+    if (Math.hypot(pullX, pullY) < 8) {
+      // estiramiento insignificante: no cuenta
+      resetProjectile();
+      return;
+    }
     projectile.vx = pullX * POWER;
     projectile.vy = pullY * POWER;
     projectile.flying = true;
     launches++;
-    launchesEl.textContent = launches;
-  });
-
-  function mouse(e) {
-    var r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    syncHud();
   }
 
-  // -------- update --------
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  // mouseup/touchend en window: si soltás fuera del canvas, igual dispara
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('touchend', onUp);
+
+  resetBtn.addEventListener('click', resetGame);
+
+  // --- update
   var lastT = performance.now();
   function step(now) {
-    var dt = Math.min((now - lastT) / 1000, 0.033);
+    var dt = Math.min((now - lastT) / 1000, 1 / 30);
     lastT = now;
     update(dt);
     render();
@@ -147,14 +223,14 @@
     projectile.x += projectile.vx * dt;
     projectile.y += projectile.vy * dt;
 
-    // colisión contra el suelo
+    // suelo
     if (projectile.y + PROJECTILE_R >= GROUND_Y) {
-      // simplemente detener al tocar el suelo
-      resetProjectile();
-      return;
+      projectile.y = GROUND_Y - PROJECTILE_R;
+      projectile.vy = -projectile.vy * 0.4;
+      projectile.vx *= 0.85;
     }
 
-    // colisión con bloques (AABB vs círculo aproximado por bounding box)
+    // colisión con bloques
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b.alive) continue;
@@ -164,46 +240,53 @@
           projectile.y - PROJECTILE_R < b.y + b.h) {
         b.alive = false;
         knocked++;
-        knockedEl.textContent = knocked;
-        // pérdida de energía simple
-        projectile.vx *= 0.6;
-        projectile.vy *= 0.6;
+        syncHud();
+        projectile.vx *= 0.55;
+        projectile.vy *= 0.55;
       }
     }
 
-    // si sale por los lados / por arriba, descartar
-    if (projectile.x < -20 || projectile.x > W + 20 || projectile.y < -100) {
+    // fuera del canvas
+    if (projectile.x < -40 || projectile.x > LW + 40 || projectile.y < -200) {
       resetProjectile();
+      return;
+    }
+
+    // reposo: si casi no se mueve, descartar
+    var speed = Math.hypot(projectile.vx, projectile.vy);
+    if (speed < REST_SPEED) {
+      projectile.restMs += dt * 1000;
+      if (projectile.restMs > REST_MS) resetProjectile();
+    } else {
+      projectile.restMs = 0;
     }
   }
 
-  // -------- render --------
+  // --- render
   function render() {
     ctx.fillStyle = COLORS.bg;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, LW, LH);
 
-    // suelo
     ctx.fillStyle = COLORS.ground;
-    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+    ctx.fillRect(0, GROUND_Y, LW, LH - GROUND_Y);
 
-    // resortera: dos palos en forma de "Y"
+    // resortera
     ctx.strokeStyle = COLORS.sling;
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(SLING_X - 12, GROUND_Y);
-    ctx.lineTo(SLING_X - 4, SLING_Y);
-    ctx.moveTo(SLING_X + 12, GROUND_Y);
-    ctx.lineTo(SLING_X + 4, SLING_Y);
+    ctx.moveTo(SLING_X - 14, GROUND_Y);
+    ctx.lineTo(SLING_X - 5,  SLING_Y);
+    ctx.moveTo(SLING_X + 14, GROUND_Y);
+    ctx.lineTo(SLING_X + 5,  SLING_Y);
     ctx.stroke();
 
-    // goma si está arrastrando
     if (!projectile.flying) {
       ctx.strokeStyle = COLORS.rubber;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(SLING_X - 4, SLING_Y);
+      ctx.moveTo(SLING_X - 5, SLING_Y);
       ctx.lineTo(projectile.x, projectile.y);
-      ctx.lineTo(SLING_X + 4, SLING_Y);
+      ctx.lineTo(SLING_X + 5, SLING_Y);
       ctx.stroke();
     }
 
@@ -222,7 +305,8 @@
     ctx.fill();
   }
 
-  buildBlocks();
+  resize();
+  resetGame();
   requestAnimationFrame(step);
 </script>
 </body>
