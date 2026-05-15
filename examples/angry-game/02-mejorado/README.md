@@ -11,7 +11,8 @@ frameworks) donde:
 - Hay gravedad y trayectoria parabólica
 - Hay 3 estructuras hechas de bloques rectangulares a la derecha
 - El objetivo es derribar los bloques con el menor número de lanzamientos
-- Muestra contador de lanzamientos y bloques derribados
+- Muestra contador de lanzamientos y de bloques derribados sobre el total
+- Botón "Reiniciar" siempre visible para volver al estado inicial
 - Colores planos, estilo minimalista
 ```
 

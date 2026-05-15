@@ -90,3 +90,8 @@ temp/
 .env.local
 .env.*.local
 !.env.example
+
+# ============================================================
+# Configuración local del agente (no se versiona)
+# ============================================================
+.claude/

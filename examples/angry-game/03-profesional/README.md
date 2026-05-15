@@ -129,8 +129,10 @@ El game loop orquesta: `input (event-driven) → update(state, dt) → render(st
   declaradas en un bloque `CONFIG` al inicio del script.
 - Sin variables globales sueltas: el código vive dentro de un IIFE.
 - Sin `console.log` ni código muerto.
-- Sin `setTimeout` para timing del juego: solo `requestAnimationFrame`
-  con delta time.
+- Sin `setTimeout` para timing del game loop: solo
+  `requestAnimationFrame` con delta time. Para secuenciar audio (notas
+  encadenadas dentro de un mismo SFX) sí se acepta `setTimeout` o el
+  scheduling propio del `AudioContext` (`osc.start(now + offset)`).
 - Balance: el desafío debe ser **terminable**. Validar manualmente que
   con buen ángulo y máximo pull, los bloques de la estructura más
   lejana son alcanzables.
