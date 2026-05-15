@@ -1,4 +1,4 @@
-# charla-agentes-demo
+# Desarrollo moderno con agentes de IA
 
 Recurso público para la charla técnica **"Desarrollo Moderno con Agentes de IA"**.
 
