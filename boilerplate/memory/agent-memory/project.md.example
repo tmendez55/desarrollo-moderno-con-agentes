@@ -1,0 +1,29 @@
+---
+name: project-decisiones-y-deadlines
+description: Decisiones del proyecto y deadlines que no viven en el código.
+type: project
+---
+
+## Freeze de merges entre 2026-06-10 y 2026-06-20
+
+No se mergea nada no crítico a `dev` durante esa ventana.
+
+**Why:** El equipo de móvil corta release branch el 2026-06-10 y necesita una API estable para validar la integración. Cualquier cambio de contrato durante la ventana se vuelve un foco de regresión que descubre el equipo de móvil, no nosotros.
+
+**How to apply:** Si una PR cae en ese rango y no es bugfix de producción, marcarla como `blocked: merge-freeze` y volver a evaluar el 2026-06-21. Bugfixes urgentes van por `hotfix/` directo a `main`.
+
+---
+
+## El rewrite del módulo `auth` es por compliance, no tech debt
+
+**Why:** Legal nos pidió en marzo que dejemos de almacenar refresh tokens en cookies tradicionales y migremos a un esquema de session tokens con storage server-side, por la nueva normativa local de privacidad. La motivación NO es ergonomía ni rendimiento.
+
+**How to apply:** Al decidir scope o atajos en el módulo `auth`, priorizar siempre lo que cierra la observación de compliance por sobre lo que mejora developer experience. Si surge la tentación de "ya que estamos refactoreamos esto otro", separarlo en un PR posterior fuera del scope del rewrite.
+
+---
+
+## El módulo `reports` está congelado hasta nuevo aviso
+
+**Why:** La directora de producto está revisando si reports va a seguir existiendo como módulo propio o se va a fusionar con `analytics`. Mientras no se decida, cualquier inversión en reports es potencial trabajo a tirar.
+
+**How to apply:** No abrir features nuevas en `src/modules/reports/`. Bugfixes urgentes sí. Si aparece un pedido de feature, redirigir a la directora antes de empezar.

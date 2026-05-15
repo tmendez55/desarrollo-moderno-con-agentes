@@ -1,0 +1,35 @@
+---
+name: reference-sistemas-externos
+description: Punteros a sistemas externos donde vive información relevante para el proyecto.
+type: reference
+---
+
+## Tracking de bugs en Linear
+
+Los bugs de producción se trackean en el proyecto Linear **"PLATFORM"** (slug interno `PLAT`).
+
+**Cuándo consultarlo:** Cuando el usuario menciona un código `PLAT-NNN`, o cuando hay que entender el contexto de una regresión existente. El histórico de comentarios de un ticket suele tener más detalle que el commit que lo cerró.
+
+---
+
+## Dashboards de oncall en Grafana
+
+Panel principal de latencia y errores: `https://grafana.example.internal/d/api-latency` (placeholder).
+
+**Cuándo consultarlo:** Antes de mergear cambios en código del request path en producción. Si el panel está rojo en p99 al momento del merge, esperar a que se estabilice o coordinar con oncall.
+
+---
+
+## Canal de Slack para incidentes
+
+`#ops-incidents` — Es el canal donde el equipo de operaciones reporta degradaciones de servicio y donde se anuncian las ventanas de mantenimiento.
+
+**Cuándo consultarlo:** Si una operación del agente parece fallar por causas externas (timeouts inesperados, conexiones rechazadas), verificar primero si hay incidente abierto antes de asumir bug local. El agente no postea en este canal; solo lee.
+
+---
+
+## Documentación de la API de billing
+
+`https://docs.example.internal/billing/v3` (placeholder).
+
+**Cuándo consultarlo:** Antes de tocar `src/modules/billing/` o cualquier integración con el proveedor de pagos. La API tiene comportamientos no obvios alrededor de webhooks asincrónicos que están documentados ahí y no en nuestro repo.

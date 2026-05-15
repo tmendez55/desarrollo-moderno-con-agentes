@@ -1,0 +1,33 @@
+---
+name: feedback-testing-y-estilo
+description: Correcciones y validaciones del usuario sobre testing y estilo de código.
+type: feedback
+---
+
+## No mockear la base de datos en tests de integración
+
+Usar Postgres real corriendo en Docker, no mocks ni SQLite en memoria.
+
+**Why:** En el trimestre pasado tuvimos un incidente en producción porque una migración pasó todos los tests (que mockeaban la DB) y rompió en producción. Los mocks ocultan divergencias de comportamiento entre driver y DB real.
+
+**How to apply:** En `tests/integration/**` siempre conectar a la DB real del docker-compose de test. Los unit tests sí pueden usar fakes a nivel repositorio, pero nunca un mock que pretende ser Postgres.
+
+---
+
+## Preferencia validada: un solo PR grande para refactors atómicos
+
+Cuando hicimos el rename masivo de `getUserCtx` → `getRequestContext` en 47 archivos, propuse mandarlo en un solo PR. La usuaria confirmó: "perfecto, esto se rompe si lo partimos".
+
+**Why:** Refactors que cruzan toda la base se vuelven inmergeables si llegan en pedazos: el primer PR queda esperando, el segundo queda con conflictos, y al final hay que rehacerlo todo.
+
+**How to apply:** Para refactors que son atómicos por naturaleza (renames, cambios de firma, reorganizaciones de carpetas), proponer un solo PR aunque sea grande, y compensar con un commit por archivo o por tipo de cambio para facilitar la revisión.
+
+---
+
+## No agregar comentarios que repitan el código
+
+La usuaria me corrigió dos veces por escribir cosas como `// incrementa el contador` arriba de `counter += 1`.
+
+**Why:** Comentarios que dicen lo mismo que el código se desactualizan más rápido que el código y agregan ruido. El nombre del símbolo es la primera línea de documentación.
+
+**How to apply:** Comentarios solo cuando el "por qué" no es obvio: hidden constraint, workaround para un bug específico, decisión que sorprendería al lector. Si el comentario podría desaparecer y nadie se confundiría, no escribirlo.

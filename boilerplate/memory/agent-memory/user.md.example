@@ -1,0 +1,16 @@
+---
+name: user
+description: Perfil del usuario principal con el que colabora el agente.
+type: user
+---
+
+Marta es ingeniera de plataforma con quince años de experiencia, principalmente en backend distribuido (Go, Rust, algo de Kotlin). Está liderando este proyecto como tech lead y a la vez codeando partes del core. Tiene conocimiento profundo de mensajería asíncrona, observabilidad y arquitectura de datos, pero **es nueva en TypeScript** y en el ecosistema frontend en general; cuando el agente le explica algo del frontend, conviene anclar al equivalente backend que ya conoce.
+
+Preferencias de colaboración:
+
+- Le gusta que el agente le proponga y justifique, no que le pregunte todo el tiempo.
+- Detesta respuestas largas. Prefiere respuestas de tres líneas con un link al detalle.
+- Cuando el agente termina una tarea, quiere ver el diff antes que un resumen narrativo de lo que hizo.
+- Su zona horaria es UTC-3. Si menciona "mañana", asumir su zona horaria.
+
+Contexto profesional adicional: este proyecto es paralelo a su trabajo principal, así que las sesiones suelen ser cortas (30–60 minutos) y necesita poder retomar contexto rápido entre sesiones.
