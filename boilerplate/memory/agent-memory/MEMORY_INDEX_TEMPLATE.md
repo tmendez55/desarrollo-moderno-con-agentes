@@ -12,12 +12,16 @@ Una línea por memoria, con tipo y un resumen de una línea. El detalle vive en 
 
 El `<tipo>` es uno de: `user`, `feedback`, `project`, `reference`.
 
-## Entradas
+## Entradas (rellenar al crear cada memoria)
 
-- [user] [user.md](./user.md) — `<<una_linea_sobre_quien_es_el_usuario>>`.
-- [feedback] [feedback-testing.md](./feedback-testing.md) — `<<una_linea_sobre_la_correccion_o_validacion>>`.
-- [project] [project-deadline.md](./project-deadline.md) — `<<una_linea_sobre_el_hito_o_decision>>`.
-- [reference] [reference-grafana.md](./reference-grafana.md) — `<<una_linea_sobre_el_sistema_externo>>`.
+Los siguientes son **ejemplos de formato**, no entradas vigentes. Reemplazalos por tus memorias reales y borrá esta nota.
+
+```
+- [user] [user.md](./user.md) — <<una_linea_sobre_quien_es_el_usuario>>.
+- [feedback] [feedback-testing.md](./feedback-testing.md) — <<una_linea_sobre_la_correccion_o_validacion>>.
+- [project] [project-deadline.md](./project-deadline.md) — <<una_linea_sobre_el_hito_o_decision>>.
+- [reference] [reference-grafana.md](./reference-grafana.md) — <<una_linea_sobre_el_sistema_externo>>.
+```
 
 ## Reglas para mantener el índice
 

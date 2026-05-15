@@ -127,7 +127,7 @@ fi
 # ----- Paso 4: renombrar archivo de instrucciones del agente ------------------
 INSTR_SRC="AGENT_INSTRUCTIONS.md"
 if [ -f "$INSTR_SRC" ]; then
-  if confirm "¿Tu agente requiere que el archivo de instrucciones tenga otro nombre? (ej. CLAUDE.md, AGENTS.md, .cursorrules)"; then
+  if confirm "¿Tu agente requiere que el archivo de instrucciones tenga otro nombre? (algunas herramientas lo esperan así)"; then
     new_name="$(prompt "Nombre objetivo")"
     if [ -z "$new_name" ]; then
       warn "Nombre vacío. Dejando $INSTR_SRC sin tocar."
