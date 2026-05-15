@@ -68,3 +68,32 @@ boilerplate/
 └── examples/
     └── nodets/                Ejemplo aplicado en Node/TypeScript
 ```
+
+## Anti-patrones que matan la escalabilidad
+
+Cuatro patrones recurrentes que destruyen la colaboración con agentes a mediano plazo. Cada uno aparece inocente, se asienta sin que nadie lo cuestione, y dos meses después el sistema está roto y nadie sabe por qué.
+
+### 1. Memoria como log de actividad
+
+Usar la memoria del agente para registrar todo lo que pasó en cada sesión: "el martes hice X, el miércoles hice Y, el jueves discutimos Z". El archivo crece sin freno, las entradas viejas contradicen a las nuevas, y el agente termina cargando ruido en lugar de señal.
+
+> **Regla de oro:** La memoria es para lo que va a ser cierto en futuras sesiones, no para lo que pasó en esta. Si lo que escribís no va a ayudar al agente la próxima vez, no es memoria: es un diario, y el diario va en otra parte (o en ningún lado).
+
+### 2. Documentación que miente
+
+Documentación que existió, dejó de ser cierta y no se actualizó. El agente la lee como verdad y construye encima decisiones falsas. El daño es peor que no tener documentación, porque el agente confía y nadie lo cuestiona.
+
+> **Regla de oro:** Documentación desactualizada se borra o se corrige; no se ignora. Cada PR que cambia comportamiento revisa los context packs, ADRs y specs afectados. La documentación es parte del cambio, no un paso opcional posterior.
+
+### 3. Agente con permisos en `main`
+
+Darle al agente capacidad técnica de mergear a `main`, hacer force push, borrar branches compartidas o tocar producción directamente. El agente es rápido y eficiente: rápida y eficientemente puede romper producción sin nadie en el medio.
+
+> **Regla de oro:** El agente nunca mergea a `main`. Ni con permisos, ni "solo esta vez", ni para arreglar lo que acabó de romper. El merge a `main` es un acto de responsabilidad humana firmado por una persona.
+
+### 4. Trabajo sin issue
+
+Tareas que el agente ejecuta sin que exista un issue, spec o ticket que las explique. Cuando algo sale mal, no hay rastro de quién pidió qué ni con qué criterio. Cuando algo sale bien, tampoco: el trabajo queda invisible en el chat y no informa decisiones futuras.
+
+> **Regla de oro:** Cada cambio mergeable apunta a un issue, una spec o un ADR. Si no se puede linkear, probablemente no debía hacerse, o debía discutirse antes. El historial del proyecto vive en commits **y** en issues, no solo en uno.
+
